@@ -16,7 +16,7 @@ import pickle
 import tokenizer
 import tf_idf
 # punc = '''!()-[]{};:'"\,<>./?@#$%^&*_~'''
-dir = 'CACM_Clean/'
+dir = 'CISI_Clean/'
 
 
 def read_document(filename):
@@ -58,44 +58,53 @@ def generate_TF():
         matrix[file.split('.')[0]] = (tf_idf.tf_generator(
             title_tokens + auther_tokens + document_token + dates))
         print("done")
-    with open('CACM_TF.json', 'x') as w:
+        print("-------------------------")
+    with open('CISI_TF.json', 'x') as w:
         w.write(json.dumps(matrix))
         w.close()
-
+# generate_TF()
 
 def generate_TF_Clean_And_IDF():
-    with open('CACM_TF.json', 'r') as f:
+    with open('CISI_TF.json', 'r') as f:
+        print("loading tf matrix....")
         test = f.read()
         _object = json.loads(test)
+        print("done reading...")
         document_count = len(_object.keys())
         # print(document_count)
         # print(_object.keys())
         token_set = {}
         matrix = {}
+        print("start...")
         for key, value in _object.items():
             for key2, value2 in value.items():
                 if not key2 in token_set:
                     token_set[key2] = 1
                 else:
                     token_set[key2] += 1
-        for key, value in _object.items():
-            for token, value2 in token_set.items():
-                if not token in value:
-                    value[token] = 0
+        print("done 1")
+        # for key, value in _object.items():
+        #     for token, value2 in token_set.items():
+        #         if not token in value:
+        #             value[token] = 0
+        # print("done 2")
         # with open('CISI_TF_Clean.json', 'x') as w:
         #     w.write(json.dumps(_object))
         #     w.close()
-        with open('CACM_IDF.json', 'x') as w:
+        with open('CISI_IDF.json', 'x') as w:
             for key, value in token_set.items():
                 token_set[key] = math.log10(document_count / value)
+            print("done 2 almost there")
             w.write(json.dumps(token_set))
             w.close()
+            print("done")
 
+# generate_TF_Clean_And_IDF()
 
 def generate_TF_IDF():
     tf_idf = {}
     reg = r"ca[0-9]+"
-    with open('CISI_TF_Clean.json', 'r') as f:
+    with open('CISI_TF.json', 'r') as f:
         tf_idf = json.loads(f.read())
     with open('CISI_IDF.json', 'r') as ff:
         idf = json.loads(ff.read())
@@ -103,7 +112,8 @@ def generate_TF_IDF():
     print("generate TF_IDF")
     for key, value in tf_idf.items():
         for k, v in idf.items():
-            if (not re.search(reg, k)) and k.__len__() > 3:
+            # if (not re.search(reg, k)) and k.__len__() > 3:
+            if k in tf_idf[key]:
                 if not key in tt:
                     tt[key] = {}
                 tt[key][k] = round(tf_idf[key][k] * v * 100, 5)
@@ -112,7 +122,6 @@ def generate_TF_IDF():
         # pickle.dump(tf_idf,f, protocol=pickle.HIGHEST_PROTOCOL)
         w.close()
     print("--------------------------------")
-
 
 def read_TF_IDF(filename):
     with open(filename, 'r') as f:
@@ -140,15 +149,15 @@ def query(query, _tf_idf, k):
     matches = [rule for rule in matches if not is_bad_rule(rule)]
     query = language_tool_python.utils.correct(query, matches)
     [token, dates] = tokenizer.tokenize(query)
-    idf = tf_idf.tf_generator(token)
+    idf = tf_idf.tf_generator(token + dates)
     res_set = []
     for i in idf:
         if not i in _tf_idf:
             continue
         array = _tf_idf[i]
         s_arr = sorted(array, key=lambda x: x['value'] * 1000, reverse=True)
-        if(s_arr[0]['value'] > 0):
-            res_set.append([w for w in s_arr if w['value'] > 0])
+        # if(s_arr[0]['value'] > 0):
+        res_set.append([w for w in s_arr if w['value'] > 0])
     result = {}
     rr = []
     for res in res_set:
@@ -180,11 +189,18 @@ async def hello(websocket):
     if(req['action'] == 'search'):
         res = query(req['query'], cisi_tf_idf if req['dataset']
                     == 'CISI' else cacm_tf_idf, int(req['count']))
+        print(res)
     if req['action'] == 'getDetails':
         with open(('CISI_Clean/' if req['dataset'] == 'CISI' else 'CACM_Clean/') + req['fileName'] + ".txt", 'r') as f:
             res["content"] = f.read()
+    if req['action'] == 'getEvaluation' and req['dataset'] == 'CISI':
+        with open('evaluations/ev_cisi_a.json') as f:
+            res["content"] = f.read()
+    if req['action'] == 'getEvaluation' and req['dataset'] == 'CACM':
+        with open('evaluations/ev_cacm_a.json') as f:
+            res["content"] = f.read()
     await websocket.send(json.dumps(res))
-    # print(f">>> {greeting}")
+    print("---------end------------")
 
 
 async def main():
@@ -198,11 +214,11 @@ print("done reading language tool...")
 if __name__ == "__main__":
     print("reading indices please wait...")
     print("reading CISI index")
-    cisi_tf_idf = read_TF_IDF('CISI_TF_IDF.json')
+    cisi_tf_idf = read_TF_IDF('_CISI_TF_IDF.json')
     print("done reading CISI index")
 
     print("reading CACM index")
-    cacm_tf_idf = read_TF_IDF('CACM_TF_IDF.json')
+    cacm_tf_idf = read_TF_IDF('_CACM_TF_IDF.json')
     print("done reading CACM index")
 
     print("done fetching the index")
@@ -222,35 +238,54 @@ def evaluate(filename):
             line = f.readline()
         return res
 
-
 def evaluate_at(diric, k):
     ev_res = {}
     files = os.listdir(diric)
+    # reaed the relation file
     ev_obj = evaluate("data_sets/CISI/CISI.REL" if diric ==
                       "CISI_Clean_Query/" else "data_sets/CACM/qrels.text")
+    
     pre = 0.0
     rec = 0.0
     c = 0
     for file in files:
         with open(diric + file) as f:
+
+            # the query id
             counter = file[4:-4]
+
             print("Running test on " + file)
             q_text = f.read()
             result_set = query(q_text, cisi_tf_idf, k)[0]
             print("Done Extracting results")
+
+            # number of relevant results
             ok = 0
+            # the index of the document
+            count = 0
+            # average precision
+            AP = 0.0
+            RR = 0.0
             for r in result_set:
+                count += 1
                 if str(counter) in ev_obj:
                     if r['doc_name'][4:] in ev_obj[str(counter)]:
+                        if ok == 0:
+                            RR = 1/count
                         ok += 1
+                        AP += (ok / count)
             if str(counter) in ev_obj:
+                if ok > 0:
+                    AP = AP/ok
                 ev_res['k'] = k
                 ev_res[str(counter)] = {}
                 ev_res[str(counter)]['precision'] = (ok/k)
                 ev_res[str(counter)]['recall'] = (
                     ok/ev_obj[str(counter)].__len__())
-                pre += (ok/k)
-                rec += (ok/ev_obj[str(counter)].__len__())
+                ev_res[str(counter)]['average_precision'] = AP
+                ev_res[str(counter)]['RR'] = RR
+                pre += AP
+                rec += RR
                 c += 1
                 print("Precision@"+str(k)+" = " + str(ok/k))
                 print("Recall = " + str(ok/ev_obj[str(counter)].__len__()))
@@ -258,7 +293,7 @@ def evaluate_at(diric, k):
     ev_res['MAP'] = pre/c
     ev_res['MRR'] = rec/c
     ev_res['number_of_q'] = c
-    with open('ev_cisi_a.json', 'w') as f:
+    with open('evaluations/ev_cisi_2.json', 'w') as f:
         f.write(json.dumps(ev_res))
         f.close()
     print("MAP@"+str(k)+" = " + str(pre/c))

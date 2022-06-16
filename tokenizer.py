@@ -3,6 +3,7 @@ from nltk.corpus import stopwords
 from dateutil.parser import parse
 from nltk.stem import WordNetLemmatizer
 from nltk.stem import PorterStemmer
+import datefinder
 
 stop_words = set(stopwords.words('english'))
 punc = ['.', ',']
@@ -38,14 +39,10 @@ def lemmitize_tokens(tokens):
 
 def extract_dates(lowerText):
     dates = []
-    res = lowerText.split()
-    for ff in list(res):
-        if(is_date(ff)):
-            if (not ff.isdigit()):
-                now = parse(ff)
-                today = now.date()
-                lowerText = lowerText.replace(ff, "")
-                dates.append(str(today))
+    matches = datefinder.find_dates(lowerText)
+    for match in matches:
+       print(match)
+       dates.append(str(match))
     return dates
 
 def is_date(string, fuzzy=False):
